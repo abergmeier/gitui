@@ -8,7 +8,10 @@ use std::{cmp, collections::BTreeSet, path::Path};
 #[derive(Default)]
 pub struct StatusTree {
 	pub tree: FileTreeItems,
-	pub selection: Option<usize>,
+	/// All selected tree item indices
+	pub selection: Vec<usize>,
+	/// Index of active tree item. `active` ∈ `selection`.
+	pub active: Option<usize>,
 
 	// some folders may be folded up, this allows jumping
 	// over folders which are folded into their parent
@@ -17,7 +20,7 @@ pub struct StatusTree {
 
 ///
 #[derive(Copy, Clone, Debug)]
-pub enum MoveSelection {
+pub enum MoveActive {
 	Up,
 	Down,
 	Left,
@@ -26,12 +29,16 @@ pub enum MoveSelection {
 	End,
 }
 
+pub enum MoveActiveOption {
+	Multi,
+}
+
 #[derive(Copy, Clone, Debug)]
-struct SelectionChange {
+struct ActiveChange {
 	new_index: usize,
 	changes: bool,
 }
-impl SelectionChange {
+impl ActiveChange {
 	const fn new(new_index: usize, changes: bool) -> Self {
 		Self { new_index, changes }
 	}
@@ -864,7 +871,6 @@ mod tests {
 		assert!(res.move_selection(MoveSelection::Left)); // fold 1
 		assert!(res.move_selection(MoveSelection::Down)); // move to 4
 		assert_eq!(res.selection, Some(4));
-
 		assert!(res.move_selection(MoveSelection::Left)); // fold 4
 		assert!(res.move_selection(MoveSelection::Down)); // move to 7
 		assert_eq!(res.selection, Some(7));
@@ -880,5 +886,75 @@ mod tests {
 
 		assert!(res.move_selection(MoveSelection::Left)); // jump to 0
 		assert_eq!(res.selection, Some(0));
+	}
+
+	#[test]
+	fn test_selection_add() {
+		let items = string_vec_to_status(&[
+			"a/b/c/d", //
+			"a/e/f/g", //
+		]);
+
+		//0 a/
+		//1   b/
+		//2     c/
+		//3       d
+		//4   e/
+		//5     f/
+		//6       g
+
+		let mut res = StatusTree::default();
+		res.update(&items).unwrap();
+		res.active = Some(0);
+
+		res.move_active(
+			MoveActive::Down,
+			Some(MoveActiveOption::Multi),
+		);
+		res.move_active(
+			MoveActive::Down,
+			Some(MoveActiveOption::Multi),
+		);
+		res.move_active(
+			MoveActive::Down,
+			Some(MoveActiveOption::Multi),
+		);
+		assert_eq!(res.active, Some(3));
+		assert!(res.selection.contains(&3));
+		assert_eq!(res.selection, vec![0, 1, 2, 3, 4, 5, 6]);
+	}
+
+	#[test]
+	fn test_selection_remove() {
+		let items = string_vec_to_status(&[
+			"a/b/c/d", //
+			"a/e/f/g", //
+		]);
+
+		//0 a/
+		//1   b/
+		//2     c/
+		//3       d
+		//4   e/
+		//5     f/
+		//6       g
+
+		let mut res = StatusTree::default();
+		res.update(&items).unwrap();
+		res.active = Some(6);
+		res.selection = vec![0, 1, 2, 3, 4, 5, 6];
+
+		res.move_active(
+			MoveActive::Up,
+			Some(MoveActiveOption::Multi),
+		);
+		res.move_active(
+			MoveActive::Up,
+			Some(MoveActiveOption::Multi),
+		);
+
+		assert_eq!(res.active, Some(4));
+		assert!(res.selection.contains(&4));
+		assert_eq!(res.selection, vec![0, 1, 2, 3, 4]);
 	}
 }
